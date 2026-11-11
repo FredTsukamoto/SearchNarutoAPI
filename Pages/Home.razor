@@ -1,0 +1,135 @@
+@page "/"
+@using SearchNarutoAPI.Models
+@using SearchNarutoAPI.Services
+@inject NarutoApiService Api
+
+<PageTitle>SearchNarutoAPI</PageTitle>
+
+<h1>Personagens de Naruto</h1>
+
+<form class="row g-2 mb-3" @onsubmit="SearchAsync">
+    <div class="col-sm-8">
+        <input class="form-control" placeholder="Buscar por nome (ex.: Naruto, Sasuke, Sakura)" @bind="searchTerm" />
+    </div>
+    <div class="col-auto">
+        <button class="btn btn-primary" type="submit">Buscar</button>
+        <button class="btn btn-outline-secondary" type="button" @onclick="ClearAsync">Limpar</button>
+    </div>
+</form>
+
+@if (loading)
+{
+    <p><em>Carregando... (a API gratuita pode demorar alguns segundos para acordar)</em></p>
+}
+else if (error is not null)
+{
+    <div class="alert alert-danger">@error</div>
+}
+else if (characters.Count == 0)
+{
+    <p>Nenhum personagem encontrado.</p>
+}
+else
+{
+    <p class="text-muted">@total personagem(ns) encontrado(s) — página @currentPage de @totalPages</p>
+
+    <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3">
+        @foreach (var c in characters)
+        {
+            <div class="col">
+                <div class="card h-100">
+                    @if (c.FirstImage is not null)
+                    {
+                        <img src="@c.FirstImage" class="card-img-top" alt="@c.Name" style="height:260px;object-fit:cover;object-position:top" loading="lazy" />
+                    }
+                    <div class="card-body">
+                        <h5 class="card-title">@c.Name</h5>
+                        <p class="mb-1"><strong>Clã/Afiliação:</strong> @c.Clan</p>
+                        <p class="mb-2"><strong>Patente ninja:</strong> @c.NinjaRank</p>
+                        <details>
+                            <summary><strong>Jutsus (@c.Jutsu.Count)</strong></summary>
+                            @if (c.Jutsu.Count == 0)
+                            {
+                                <span>Nenhum jutsu registrado.</span>
+                            }
+                            else
+                            {
+                                <ul class="small mb-0" style="max-height:180px;overflow:auto">
+                                    @foreach (var j in c.Jutsu)
+                                    {
+                                        <li>@j</li>
+                                    }
+                                </ul>
+                            }
+                        </details>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="d-flex justify-content-between mt-3">
+        <button class="btn btn-outline-primary" disabled="@(currentPage <= 1)" @onclick="PrevAsync">&laquo; Anterior</button>
+        <button class="btn btn-outline-primary" disabled="@(currentPage >= totalPages)" @onclick="NextAsync">Próxima &raquo;</button>
+    </div>
+}
+
+@code {
+    private const int PageSize = 12;
+    private string? searchTerm;
+    private string? activeTerm;
+    private List<Character> characters = new();
+    private int currentPage = 1, total, totalPages = 1;
+    private bool loading;
+    private string? error;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task SearchAsync()
+    {
+        activeTerm = searchTerm;
+        currentPage = 1;
+        await LoadAsync();
+    }
+
+    private async Task ClearAsync()
+    {
+        searchTerm = activeTerm = null;
+        currentPage = 1;
+        await LoadAsync();
+    }
+
+    private Task PrevAsync()
+    {
+        currentPage--;
+        return LoadAsync();
+    }
+
+    private Task NextAsync()
+    {
+        currentPage++;
+        return LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        loading = true;
+        error = null;
+        try
+        {
+            var r = await Api.GetCharactersAsync(activeTerm, currentPage, PageSize);
+            characters = r.Characters;
+            total = r.Total;
+            totalPages = Math.Max(1, (int)Math.Ceiling(total / (double)PageSize));
+        }
+        catch (Exception ex)
+        {
+            characters = new();
+            error = $"Erro ao consultar a API: {ex.Message}";
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+}
